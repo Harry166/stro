@@ -1,0 +1,13 @@
+flask==3.0.0
+yfinance==0.2.33
+beautifulsoup4==4.12.2
+requests==2.31.0
+transformers
+torch
+pandas
+numpy
+plotly==5.18.0
+newsapi-python==0.2.7
+apscheduler==3.10.4
+python-dotenv==1.0.0
+gunicorn==21.2.0

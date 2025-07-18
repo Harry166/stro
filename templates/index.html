@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stro - Smart Stock Insights</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0b0d;
+            --bg-secondary: #141519;
+            --bg-card: #1a1b23;
+            --bg-hover: #22232d;
+            --text-primary: #e4e4e7;
+            --text-secondary: #a1a1aa;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #10b981;
+            --accent-danger: #ef4444;
+            --border-color: #27272a;
+            --chart-grid: #27272a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        .header {
+            background-color: var(--bg-secondary);
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            background-color: rgba(20, 21, 25, 0.95);
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        /* Search Bar */
+        .search-container {
+            max-width: 500px;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+        }
+
+        .search-bar {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 20px;
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .search-button {
+            position: absolute;
+            right: 8px;
+            background-color: var(--accent-primary);
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .search-button:hover {
+            background-color: #2563eb;
+            transform: scale(1.05);
+        }
+
+        .search-button svg {
+            width: 16px;
+            height: 16px;
+            color: white;
+            display: block;
+            fill: none;
+            stroke: white;
+        }
+
+        /* Main Content */
+        .main-content {
+            padding: 40px 0;
+        }
+
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+        }
+
+        /* Stock Grid */
+        .stock-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        /* Stock Card */
+        .stock-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Upcoming Stock Card */
+        .stock-card.upcoming {
+            background: linear-gradient(135deg, var(--bg-card), rgba(168, 85, 247, 0.05));
+            border-color: rgba(168, 85, 247, 0.3);
+        }
+
+        .stock-card.upcoming:hover {
+            border-color: rgba(168, 85, 247, 0.6);
+            box-shadow: 0 10px 30px rgba(168, 85, 247, 0.15);
+        }
+
+        .stock-card.upcoming .trend-indicator {
+            background-color: #a855f7;
+            animation: pulse-purple 2s infinite;
+        }
+
+        @keyframes pulse-purple {
+            0% {
+                box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(168, 85, 247, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(168, 85, 247, 0);
+            }
+        }
+
+        .potential-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: linear-gradient(135deg, #a855f7, #6366f1);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stock-card:hover {
+            background-color: var(--bg-hover);
+            border-color: var(--accent-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.1);
+        }
+
+        .stock-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .stock-symbol {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .stock-name {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .stock-price {
+            text-align: right;
+        }
+
+        .price-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .price-change {
+            font-size: 14px;
+            margin-top: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .price-change.positive {
+            color: var(--accent-secondary);
+        }
+
+        .price-change.negative {
+            color: var(--accent-danger);
+        }
+
+        .trend-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-secondary);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        .stock-chart {
+            height: 150px;
+            margin-top: 15px;
+            border-radius: 8px;
+            overflow: hidden;
+            pointer-events: none;  /* Disable all mouse interactions */
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 60px 0;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 3px solid var(--border-color);
+            border-radius: 50%;
+            border-top-color: var(--accent-primary);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: var(--bg-secondary);
+            margin: 50px auto;
+            padding: 40px;
+            border-radius: 16px;
+            max-width: 900px;
+            position: relative;
+            border: 1px solid var(--border-color);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 30px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+
+        .close-modal:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-header {
+            margin-bottom: 30px;
+        }
+
+        .modal-title {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .modal-subtitle {
+            font-size: 18px;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .detail-chart {
+            height: 400px;
+            margin: 30px 0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .company-summary {
+            background-color: var(--bg-card);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 20px 0;
+            border: 1px solid var(--border-color);
+        }
+
+        .summary-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+        }
+
+        .summary-text {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        /* AI Prediction */
+        .ai-prediction {
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1));
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .ai-prediction-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ai-icon {
+            width: 20px;
+            height: 20px;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .prediction-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .prediction-badge.bullish {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: var(--accent-secondary);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .prediction-badge.bearish {
+            background-color: rgba(239, 68, 68, 0.2);
+            color: var(--accent-danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .prediction-badge.neutral {
+            background-color: rgba(161, 161, 170, 0.2);
+            color: var(--text-secondary);
+            border: 1px solid rgba(161, 161, 170, 0.3);
+        }
+
+        .prediction-text {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        /* Watchlist */
+        .watchlist-section {
+            background-color: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 40px;
+            border: 1px solid var(--border-color);
+        }
+
+        .watchlist-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .watchlist-title {
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .watchlist-items {
+            display: grid;
+            gap: 12px;
+        }
+
+        .watchlist-item {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .watchlist-item:hover {
+            background-color: var(--bg-hover);
+            border-color: var(--accent-primary);
+        }
+
+        .watchlist-stock-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex: 1;
+        }
+
+        .watchlist-stock-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .watchlist-stock-price {
+            color: var(--text-secondary);
+        }
+
+        .watchlist-change {
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+
+        .watchlist-change.positive {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--accent-secondary);
+        }
+
+        .watchlist-change.negative {
+            background-color: rgba(239, 68, 68, 0.1);
+            color: var(--accent-danger);
+        }
+
+        .remove-watchlist {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .remove-watchlist:hover {
+            color: var(--accent-danger);
+        }
+
+        .add-to-watchlist {
+            background-color: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 15px;
+        }
+
+        .add-to-watchlist:hover {
+            background-color: #2563eb;
+        }
+
+        .add-to-watchlist:disabled {
+            background-color: var(--border-color);
+            cursor: not-allowed;
+        }
+
+        /* Alerts */
+        .alerts-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            width: 350px;
+            z-index: 1000;
+        }
+
+        .alert-item {
+            background-color: var(--bg-card);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border: 1px solid var(--border-color);
+            animation: slideIn 0.3s ease;
+        }
+
+        .alert-item.success {
+            border-left: 4px solid var(--accent-secondary);
+        }
+
+        .alert-item.warning {
+            border-left: 4px solid var(--accent-danger);
+        }
+
+        .alert-close {
+            float: right;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Auth Modal */
+        .auth-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: var(--bg-secondary);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            z-index: 1001;
+            width: 350px;
+            border: 1px solid var(--border-color);
+        }
+
+        .auth-modal h2 {
+            margin-bottom: 20px;
+            color: var(--text-primary);
+        }
+
+        .auth-modal input {
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .auth-modal .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .auth-modal button {
+            flex: 1;
+            padding: 12px;
+            background-color: var(--accent-primary);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .auth-modal button:last-child {
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+        }
+        
+        .auth-modal button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .header button {
+            background-color: var(--accent-primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        
+        .header button:hover {
+            background-color: #2563eb;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .stock-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .modal-content {
+                margin: 20px;
+                padding: 30px 20px;
+            }
+
+            .alerts-container {
+                width: calc(100% - 40px);
+                left: 20px;
+                right: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div>
+                    <h1 class="logo">Stro</h1>
+                    <p class="subtitle">AI-Powered Stock Insights & Future Potential</p>
+                </div>
+                <div class="search-container">
+                    <div class="search-bar">
+                        <input type="text" class="search-input" id="stockSearch" placeholder="Search stock ticker (e.g., AAPL)">
+                    </div>
+                </div>
+                <div class="auth-buttons">
+                    <button onclick="openAuthModal('login')">Login</button>
+                    <button onclick="openAuthModal('register')">Register</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+<!-- Authentication Modal -->
+<div id="authModal" class="auth-modal">
+    <h2 id="authModalTitle">Login</h2>
+    <input type="text" id="authUsername" placeholder="Username" />
+    <input type="password" id="authPassword" placeholder="Password" />
+    <input type="text" id="authEmail" placeholder="Email (only for registration)" style="display:none;" />
+    <div class="button-group">
+        <button onclick="authAction()">Submit</button>
+        <button onclick="closeAuthModal()">Cancel</button>
+    </div>
+</div>
+
+    <main class="main-content">
+        <div class="container">
+            <!-- Alerts Container -->
+            <div id="alertsContainer" class="alerts-container"></div>
+            
+            <!-- Watchlist Section -->
+            <div class="watchlist-section">
+                <div class="watchlist-header">
+                    <h2 class="watchlist-title">
+                        <span>👁️</span>
+                        My Watchlist
+                    </h2>
+                    <span id="watchlistCount" style="color: var(--text-secondary);">0 stocks</span>
+                </div>
+                <div id="watchlistItems" class="watchlist-items">
+                <p id="watchlistEmptyMessage" style="text-align: center; color: var(--text-secondary);">You need to log in to access your watchlist.</p>
+                </div>
+            </div>
+
+            <h2 class="section-title">🔥 Trending Stocks</h2>
+            <div id="stockGrid" class="stock-grid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p style="margin-top: 20px; color: var(--text-secondary);">Analyzing market trends...</p>
+                </div>
+            </div>
+            
+            <h2 class="section-title">🚀 Upcoming Potential</h2>
+            <div id="upcomingGrid" class="stock-grid">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <p style="margin-top: 20px; color: var(--text-secondary);">Finding hidden gems...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Stock Detail Modal -->
+    <div id="stockModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <div id="modalContent"></div>
+        </div>
+    </div>
+
+    <script>
+        let stocksData = [];
+        let upcomingStocksData = [];
+
+        // Fetch trending stocks
+        async function fetchTrendingStocks() {
+            try {
+                const response = await fetch('/api/trending-stocks');
+                const data = await response.json();
+                stocksData = data;
+                displayStocks(data);
+            } catch (error) {
+                console.error('Error fetching stocks:', error);
+                document.getElementById('stockGrid').innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Error loading stocks. Please refresh.</p>';
+            }
+        }
+
+        // Fetch upcoming stocks
+        async function fetchUpcomingStocks() {
+            try {
+                const response = await fetch('/api/upcoming-stocks');
+                const data = await response.json();
+                upcomingStocksData = data;
+                displayUpcomingStocks(data);
+            } catch (error) {
+                console.error('Error fetching upcoming stocks:', error);
+                document.getElementById('upcomingGrid').innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Error loading upcoming stocks.</p>';
+            }
+        }
+
+        // Display upcoming stocks
+        function displayUpcomingStocks(stocks) {
+            const grid = document.getElementById('upcomingGrid');
+            grid.innerHTML = '';
+
+            stocks.forEach(stock => {
+                const card = createStockCard(stock, true);
+                grid.appendChild(card);
+            });
+        }
+
+        // Display stocks in grid
+        function displayStocks(stocks) {
+            const grid = document.getElementById('stockGrid');
+            grid.innerHTML = '';
+
+            stocks.forEach(stock => {
+                const card = createStockCard(stock);
+                grid.appendChild(card);
+            });
+        }
+
+        // Create stock card
+        function createStockCard(stock, isUpcoming = false) {
+            const card = document.createElement('div');
+            card.className = isUpcoming ? 'stock-card upcoming' : 'stock-card';
+            card.onclick = () => showStockDetails(stock.symbol);
+
+            const priceChange = ((stock.current_price - stock.chart_data.prices[0]) / stock.chart_data.prices[0] * 100).toFixed(2);
+            const isPositive = priceChange >= 0;
+
+            card.innerHTML = `
+                <div class="stock-header">
+                    <div>
+                        <div class="stock-symbol">${stock.symbol}</div>
+                        <div class="stock-name">${stock.name}</div>
+                    </div>
+                    <div class="stock-price">
+                        <div class="price-value">$${stock.current_price.toFixed(2)}</div>
+                        <div class="price-change ${isPositive ? 'positive' : 'negative'}">
+                            ${isPositive ? '▲' : '▼'} ${Math.abs(priceChange)}%
+                        </div>
+                    </div>
+                </div>
+                <div class="stock-chart" id="chart-${stock.symbol}${isUpcoming ? '-upcoming' : ''}"></div>
+            `;
+
+            // Create mini chart after card is added to DOM
+            setTimeout(() => createMiniChart(stock, isUpcoming), 100);
+
+            return card;
+        }
+
+        // Create mini chart for stock card
+        function createMiniChart(stock, isUpcoming = false) {
+            const chartId = `chart-${stock.symbol}${isUpcoming ? '-upcoming' : ''}`;
+            const trace = {
+                x: stock.chart_data.dates,
+                y: stock.chart_data.prices,
+                type: 'scatter',
+                mode: 'lines',
+                line: {
+                    color: stock.chart_data.prices[stock.chart_data.prices.length - 1] >= stock.chart_data.prices[0] ? '#10b981' : '#ef4444',
+                    width: 2
+                },
+                fill: 'tozeroy',
+                fillcolor: stock.chart_data.prices[stock.chart_data.prices.length - 1] >= stock.chart_data.prices[0] ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'
+            };
+
+            const layout = {
+                margin: { t: 0, r: 0, l: 0, b: 0 },
+                showlegend: false,
+                xaxis: { visible: false },
+                yaxis: { visible: false },
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                hovermode: false
+            };
+
+            const config = {
+                displayModeBar: false,
+                responsive: true,
+                staticPlot: true  // Disable all interactions
+            };
+
+            Plotly.newPlot(chartId, [trace], layout, config);
+        }
+
+        // Show stock details
+        async function showStockDetails(symbol) {
+            const modal = document.getElementById('stockModal');
+            const modalContent = document.getElementById('modalContent');
+            
+            modalContent.innerHTML = '<div class="loading"><div class="loading-spinner"></div></div>';
+            modal.style.display = 'block';
+
+            try {
+                const response = await fetch(`/api/stock/${symbol}`);
+                const data = await response.json();
+                
+                modalContent.innerHTML = `
+                    <div class="modal-header">
+                        <h2 class="modal-title">${data.name}</h2>
+                        <p class="modal-subtitle">${data.symbol} - $${data.current_price.toFixed(2)}</p>
+                    </div>
+                    <div class="detail-chart" id="detailChart"></div>
+                    <div class="company-summary">
+                        <h3 class="summary-title">Company Overview</h3>
+                        <p class="summary-text">${data.summary}</p>
+                    </div>
+                `;
+
+                // Create detailed chart
+                createDetailChart(data);
+            } catch (error) {
+                modalContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Error loading stock details.</p>';
+            }
+        }
+
+        // Create detailed chart
+        function createDetailChart(data) {
+            const trace = {
+                x: data.chart_data.dates,
+                y: data.chart_data.prices,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Price',
+                line: {
+                    color: '#3b82f6',
+                    width: 3
+                }
+            };
+
+            const layout = {
+                title: {
+                    text: '3-Month Price History',
+                    font: { color: '#e4e4e7', size: 18 }
+                },
+                xaxis: {
+                    title: 'Date',
+                    gridcolor: '#27272a',
+                    color: '#a1a1aa'
+                },
+                yaxis: {
+                    title: 'Price ($)',
+                    gridcolor: '#27272a',
+                    color: '#a1a1aa'
+                },
+                paper_bgcolor: '#1a1b23',
+                plot_bgcolor: '#1a1b23',
+                font: { color: '#e4e4e7' },
+                hovermode: 'x unified'
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: false
+            };
+
+            Plotly.newPlot('detailChart', [trace], layout, config);
+        }
+
+        // Close modal
+        function closeModal() {
+            document.getElementById('stockModal').style.display = 'none';
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('stockModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        // Search stock function
+        async function searchStock() {
+            const searchInput = document.getElementById('stockSearch');
+            const symbol = searchInput.value.trim().toUpperCase();
+            
+            if (!symbol) {
+                alert('Please enter a stock ticker symbol');
+                return;
+            }
+            
+            showStockDetailsWithPrediction(symbol);
+            searchInput.value = '';
+        }
+
+        // Show stock details with AI prediction
+        async function showStockDetailsWithPrediction(symbol) {
+            const modal = document.getElementById('stockModal');
+            const modalContent = document.getElementById('modalContent');
+            
+            modalContent.innerHTML = '<div class="loading"><div class="loading-spinner"></div><p style="margin-top: 20px; color: var(--text-secondary);">AI is analyzing the stock...</p></div>';
+            modal.style.display = 'block';
+
+            try {
+                const response = await fetch(`/api/stock/${symbol}?analyze=true`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    modalContent.innerHTML = `<p style="text-align: center; color: var(--text-secondary);">Stock not found. Please check the ticker symbol.</p>`;
+                    return;
+                }
+                
+                // Determine prediction
+                let predictionClass = 'neutral';
+                let predictionText = 'Neutral Outlook';
+                let aiAnalysis = data.ai_analysis || 'Based on current market conditions, this stock shows mixed signals.';
+                
+                if (data.future_prediction > 0.7) {
+                    predictionClass = 'bullish';
+                    predictionText = 'Bullish - Strong Buy';
+                } else if (data.future_prediction > 0.55) {
+                    predictionClass = 'bullish';
+                    predictionText = 'Bullish - Buy';
+                } else if (data.future_prediction < 0.3) {
+                    predictionClass = 'bearish';
+                    predictionText = 'Bearish - Sell';
+                } else if (data.future_prediction < 0.45) {
+                    predictionClass = 'bearish';
+                    predictionText = 'Bearish - Consider Selling';
+                }
+                
+                modalContent.innerHTML = `
+                    <div class="modal-header">
+                        <h2 class="modal-title">${data.name}</h2>
+                        <p class="modal-subtitle">${data.symbol} - $${data.current_price.toFixed(2)}</p>
+                    </div>
+                    
+                    <div class="ai-prediction">
+                        <div class="ai-prediction-title">
+                            <span class="ai-icon">🤖</span>
+                            AI Future Prediction
+                        </div>
+                        <div class="prediction-badge ${predictionClass}">${predictionText}</div>
+                        <p class="prediction-text">${aiAnalysis}</p>
+                    </div>
+                    
+                    <div class="detail-chart" id="detailChart"></div>
+                    <div class="company-summary">
+                        <h3 class="summary-title">Company Overview</h3>
+                        <p class="summary-text">${data.summary}</p>
+                    </div>
+                `;
+
+                // Create detailed chart
+                createDetailChart(data);
+            } catch (error) {
+                modalContent.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Error analyzing stock. Please try again.</p>';
+            }
+        }
+
+        // Handle enter key in search input
+        document.getElementById('stockSearch').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchStock();
+            }
+        });
+
+        // Watchlist Management
+        let watchlist = [];
+
+        function openAuthModal(type) {
+            const modal = document.getElementById('authModal');
+            const emailField = document.getElementById('authEmail');
+            const title = document.getElementById('authModalTitle');
+            if (type === 'register') {
+                title.textContent = 'Register';
+                emailField.style.display = 'block';
+            } else {
+                title.textContent = 'Login';
+                emailField.style.display = 'none';
+            }
+            modal.style.display = 'block';
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').style.display = 'none';
+        }
+
+        async function authAction() {
+            const type = document.getElementById('authModalTitle').textContent.toLowerCase();
+            const username = document.getElementById('authUsername').value;
+            const password = document.getElementById('authPassword').value;
+            const email = document.getElementById('authEmail').value;
+
+            const endpoint = type === 'register' ? '/api/auth/register' : '/api/auth/login';
+            const body = type === 'register' ? { username, password, email } : { username, password };
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(body)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} successful!`, 'success');
+                    closeAuthModal();
+                    checkAuthStatus();  // Update UI after login/register
+                    fetchWatchlist();
+                } else {
+                    showNotification(result.error || 'An error occurred', 'warning');
+                }
+            } catch (error) {
+                showNotification('An error occurred', 'warning');
+            }
+        }
+
+        async function fetchWatchlist() {
+            try {
+                const response = await fetch('/api/watchlist');
+                if (response.status === 401) {
+                    watchlist = { error: 'Authentication required' };
+                    displayWatchlist();
+                    return;
+                }
+                const data = await response.json();
+                watchlist = data;
+                displayWatchlist();
+                checkAlerts();
+            } catch (error) {
+                console.error('Error fetching watchlist:', error);
+                watchlist = { error: 'Error loading watchlist' };
+                displayWatchlist();
+            }
+        }
+
+        function displayWatchlist() {
+            const watchlistItems = document.getElementById('watchlistItems');
+            const watchlistCount = document.getElementById('watchlistCount');
+            
+            if (watchlist.error) {
+                watchlistItems.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">You need to log in to access your watchlist.</p>';
+                watchlistCount.textContent = '0 stocks';
+                return;
+            }
+            
+            if (watchlist.length === 0) {
+                watchlistItems.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">Your watchlist is empty. Add stocks to monitor them!</p>';
+                watchlistCount.textContent = '0 stocks';
+                return;
+            }
+            
+            watchlistCount.textContent = `${watchlist.length} stock${watchlist.length > 1 ? 's' : ''}`;
+            watchlistItems.innerHTML = '';
+            
+            watchlist.forEach(stock => {
+                const item = document.createElement('div');
+                item.className = 'watchlist-item';
+                item.innerHTML = `
+                    <div class="watchlist-stock-info" onclick="showStockDetails('${stock.symbol}')" style="cursor: pointer;">
+                        <div>
+                            <div class="watchlist-stock-name">${stock.symbol}</div>
+                            <div class="watchlist-stock-price">$${stock.current_price.toFixed(2)}</div>
+                        </div>
+                        <div class="watchlist-change ${stock.price_change >= 0 ? 'positive' : 'negative'}">
+                            ${stock.price_change >= 0 ? '▲' : '▼'} ${Math.abs(stock.price_change).toFixed(1)}%
+                        </div>
+                    </div>
+                    <button class="remove-watchlist" onclick="removeFromWatchlist('${stock.symbol}')">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                `;
+                watchlistItems.appendChild(item);
+            });
+        }
+
+        async function addToWatchlist(symbol) {
+            try {
+                const response = await fetch('/api/watchlist', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ symbol })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showNotification('Stock added to watchlist!', 'success');
+                    fetchWatchlist();
+                } else {
+                    showNotification(data.message || 'Failed to add stock', 'error');
+                }
+            } catch (error) {
+                showNotification('Error adding to watchlist', 'error');
+            }
+        }
+
+        async function removeFromWatchlist(symbol) {
+            try {
+                const response = await fetch(`/api/watchlist?symbol=${symbol}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showNotification('Stock removed from watchlist', 'success');
+                    fetchWatchlist();
+                } else {
+                    showNotification('Failed to remove stock', 'error');
+                }
+            } catch (error) {
+                showNotification('Error removing from watchlist', 'error');
+            }
+        }
+
+        async function checkAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const alerts = await response.json();
+                
+                alerts.forEach(alert => {
+                    showAlert(alert);
+                });
+            } catch (error) {
+                console.error('Error checking alerts:', error);
+            }
+        }
+
+        function showAlert(alert) {
+            const alertsContainer = document.getElementById('alertsContainer');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert-item ${alert.severity}`;
+            alertDiv.innerHTML = `
+                <span class="alert-close" onclick="this.parentElement.remove()">×</span>
+                <strong>${alert.symbol}</strong><br>
+                ${alert.message}
+            `;
+            
+            alertsContainer.appendChild(alertDiv);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 10000);
+        }
+
+        function showNotification(message, type) {
+            const alertsContainer = document.getElementById('alertsContainer');
+            const notificationDiv = document.createElement('div');
+            notificationDiv.className = `alert-item ${type === 'success' ? 'success' : 'warning'}`;
+            notificationDiv.innerHTML = `
+                <span class="alert-close" onclick="this.parentElement.remove()">×</span>
+                ${message}
+            `;
+            
+            alertsContainer.appendChild(notificationDiv);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                notificationDiv.remove();
+            }, 5000);
+        }
+
+        // Update stock details modal to include watchlist button
+        function updateModalWithWatchlistButton(symbol, modalContent) {
+            const isInWatchlist = watchlist.some(stock => stock.symbol === symbol);
+            const buttonHtml = `
+                <button class="add-to-watchlist" onclick="${isInWatchlist ? 'removeFromWatchlist' : 'addToWatchlist'}('${symbol}')" ${isInWatchlist ? 'style="background-color: var(--accent-danger);"' : ''}>
+                    ${isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                </button>
+            `;
+            
+            // Find the company summary div and add the button after it
+            const summaryDiv = modalContent.querySelector('.company-summary');
+            if (summaryDiv) {
+                summaryDiv.insertAdjacentHTML('afterend', buttonHtml);
+            }
+        }
+
+        // Override showStockDetails to include watchlist button
+        const originalShowStockDetails = showStockDetails;
+        showStockDetails = async function(symbol) {
+            await originalShowStockDetails(symbol);
+            setTimeout(() => {
+                const modalContent = document.getElementById('modalContent');
+                updateModalWithWatchlistButton(symbol, modalContent);
+            }, 100);
+        };
+
+        // Override showStockDetailsWithPrediction to include watchlist button
+        const originalShowStockDetailsWithPrediction = showStockDetailsWithPrediction;
+        showStockDetailsWithPrediction = async function(symbol) {
+            await originalShowStockDetailsWithPrediction(symbol);
+            setTimeout(() => {
+                const modalContent = document.getElementById('modalContent');
+                updateModalWithWatchlistButton(symbol, modalContent);
+            }, 100);
+        };
+
+        // Check authentication status and update UI
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                updateAuthUI(data.authenticated, data.user);
+            } catch (error) {
+                console.error('Error checking auth status:', error);
+            }
+        }
+
+        function updateAuthUI(authenticated, user) {
+            const authButtons = document.querySelector('.auth-buttons');
+            
+            if (authenticated && user) {
+                // User is logged in - hide login/register buttons and show user info
+                authButtons.innerHTML = `
+                    <span style="color: var(--text-secondary); margin-right: 10px;">Welcome, ${user.username}</span>
+                    <button onclick="logoutUser()">Logout</button>
+                `;
+                
+                // Update watchlist message
+                const emptyMessage = document.getElementById('watchlistEmptyMessage');
+                if (emptyMessage) {
+                    emptyMessage.textContent = 'Your watchlist is empty. Add stocks to monitor them!';
+                }
+            } else {
+                // User is not logged in - show login/register buttons
+                authButtons.innerHTML = `
+                    <button onclick="openAuthModal('login')">Login</button>
+                    <button onclick="openAuthModal('register')">Register</button>
+                `;
+            }
+        }
+
+        async function logoutUser() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showNotification('Logged out successfully', 'success');
+                    checkAuthStatus();
+                    fetchWatchlist();
+                }
+            } catch (error) {
+                showNotification('Error logging out', 'warning');
+            }
+        }
+
+        // Initialize
+        checkAuthStatus();
+        fetchTrendingStocks();
+        fetchUpcomingStocks();
+        fetchWatchlist();
+        
+        // Refresh every 5 minutes
+        setInterval(() => {
+            fetchTrendingStocks();
+            fetchUpcomingStocks();
+            fetchWatchlist();
+        }, 300000);
+        
+        // Check alerts every minute
+        setInterval(() => {
+            checkAlerts();
+        }, 60000);
+    </script>
+</body>
+</html>
