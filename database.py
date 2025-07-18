@@ -147,19 +147,19 @@ class Database:
     
     def remove_from_watchlist(self, user_id, symbol):
         """Remove stock from user's watchlist"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            DELETE FROM watchlist
-            WHERE user_id = ? AND symbol = ?
-        ''', (user_id, symbol))
-        
-        conn.commit()
-        rows_affected = cursor.rowcount
-        conn.close()
-        
-        return {'success': rows_affected > 0}
+        try:
+            with sqlite3.connect(self.db_path, timeout=30, check_same_thread=False) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    DELETE FROM watchlist
+                    WHERE user_id = ? AND symbol = ?
+                ''', (user_id, symbol))
+                rows_affected = cursor.rowcount
+                conn.commit()
+            
+            return {'success': rows_affected > 0}
+        except sqlite3.Error as e:
+            return {'success': False, 'error': str(e)}
     
     def save_alert(self, user_id, symbol, alert_type, message):
         """Save alert to history"""

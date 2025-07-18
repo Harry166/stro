@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stro - Smart Stock Insights</title>
+    <title>Stro - Buy Smart, Save Smart</title>
+    <link rel="icon" href="/static/stro_logo.png" type="image/png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
         :root {
             --bg-primary: #0a0b0d;
@@ -850,9 +852,11 @@
         function createStockCard(stock, isUpcoming = false) {
             const card = document.createElement('div');
             card.className = isUpcoming ? 'stock-card upcoming' : 'stock-card';
+            card.id = `stock-${stock.symbol}`;
             card.onclick = () => showStockDetails(stock.symbol);
 
-            const priceChange = ((stock.current_price - stock.chart_data.prices[0]) / stock.chart_data.prices[0] * 100).toFixed(2);
+            // Use real-time price change percentage from backend
+            const priceChange = stock.price_change_pct || 0;
             const isPositive = priceChange >= 0;
 
             card.innerHTML = `
@@ -864,7 +868,7 @@
                     <div class="stock-price">
                         <div class="price-value">$${stock.current_price.toFixed(2)}</div>
                         <div class="price-change ${isPositive ? 'positive' : 'negative'}">
-                            ${isPositive ? '▲' : '▼'} ${Math.abs(priceChange)}%
+                            ${isPositive ? '▲' : '▼'} ${Math.abs(priceChange).toFixed(2)}%
                         </div>
                     </div>
                 </div>
@@ -880,17 +884,21 @@
         // Create mini chart for stock card
         function createMiniChart(stock, isUpcoming = false) {
             const chartId = `chart-${stock.symbol}${isUpcoming ? '-upcoming' : ''}`;
+            // Use the actual price change percentage to determine color
+            const priceChange = stock.price_change_pct || 0;
+            const isPositive = priceChange >= 0;
+            
             const trace = {
                 x: stock.chart_data.dates,
                 y: stock.chart_data.prices,
                 type: 'scatter',
                 mode: 'lines',
                 line: {
-                    color: stock.chart_data.prices[stock.chart_data.prices.length - 1] >= stock.chart_data.prices[0] ? '#10b981' : '#ef4444',
+                    color: isPositive ? '#10b981' : '#ef4444',
                     width: 2
                 },
                 fill: 'tozeroy',
-                fillcolor: stock.chart_data.prices[stock.chart_data.prices.length - 1] >= stock.chart_data.prices[0] ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'
+                fillcolor: isPositive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'
             };
 
             const layout = {
@@ -924,10 +932,13 @@
                 const response = await fetch(`/api/stock/${symbol}`);
                 const data = await response.json();
                 
+                const priceChange = data.price_change_pct || 0;
+                const isPositive = priceChange >= 0;
+                
                 modalContent.innerHTML = `
                     <div class="modal-header">
                         <h2 class="modal-title">${data.name}</h2>
-                        <p class="modal-subtitle">${data.symbol} - $${data.current_price.toFixed(2)}</p>
+                        <p class="modal-subtitle">${data.symbol} - $${data.current_price.toFixed(2)} <span class="price-change ${isPositive ? 'positive' : 'negative'}">${isPositive ? '▲' : '▼'} ${Math.abs(priceChange).toFixed(2)}%</span></p>
                     </div>
                     <div class="detail-chart" id="detailChart"></div>
                     <div class="company-summary">
@@ -1049,10 +1060,13 @@
                     predictionText = 'Bearish - Consider Selling';
                 }
                 
+                const priceChange = data.price_change_pct || 0;
+                const isPositive = priceChange >= 0;
+                
                 modalContent.innerHTML = `
                     <div class="modal-header">
                         <h2 class="modal-title">${data.name}</h2>
-                        <p class="modal-subtitle">${data.symbol} - $${data.current_price.toFixed(2)}</p>
+                        <p class="modal-subtitle">${data.symbol} - $${data.current_price.toFixed(2)} <span class="price-change ${isPositive ? 'positive' : 'negative'}">${isPositive ? '▲' : '▼'} ${Math.abs(priceChange).toFixed(2)}%</span></p>
                     </div>
                     
                     <div class="ai-prediction">
@@ -1185,7 +1199,7 @@
                             <div class="watchlist-stock-price">$${stock.current_price.toFixed(2)}</div>
                         </div>
                         <div class="watchlist-change ${stock.price_change >= 0 ? 'positive' : 'negative'}">
-                            ${stock.price_change >= 0 ? '▲' : '▼'} ${Math.abs(stock.price_change).toFixed(1)}%
+                            ${stock.price_change >= 0 ? '▲' : '▼'} ${Math.abs(stock.price_change).toFixed(2)}%
                         </div>
                     </div>
                     <button class="remove-watchlist" onclick="removeFromWatchlist('${stock.symbol}')">
@@ -1212,7 +1226,12 @@
                 const data = await response.json();
                 if (data.success) {
                     showNotification('Stock added to watchlist!', 'success');
-                    fetchWatchlist();
+                    await fetchWatchlist();
+                    // Update the button in the modal if it's open
+                    const modalContent = document.getElementById('modalContent');
+                    if (modalContent) {
+                        updateModalWithWatchlistButton(symbol, modalContent);
+                    }
                 } else {
                     showNotification(data.message || 'Failed to add stock', 'error');
                 }
@@ -1230,7 +1249,12 @@
                 const data = await response.json();
                 if (data.success) {
                     showNotification('Stock removed from watchlist', 'success');
-                    fetchWatchlist();
+                    await fetchWatchlist();
+                    // Update the button in the modal if it's open
+                    const modalContent = document.getElementById('modalContent');
+                    if (modalContent) {
+                        updateModalWithWatchlistButton(symbol, modalContent);
+                    }
                 } else {
                     showNotification('Failed to remove stock', 'error');
                 }
@@ -1290,6 +1314,13 @@
         // Update stock details modal to include watchlist button
         function updateModalWithWatchlistButton(symbol, modalContent) {
             const isInWatchlist = watchlist.some(stock => stock.symbol === symbol);
+            
+            // Remove any existing watchlist button first
+            const existingButton = modalContent.querySelector('.add-to-watchlist');
+            if (existingButton) {
+                existingButton.remove();
+            }
+            
             const buttonHtml = `
                 <button class="add-to-watchlist" onclick="${isInWatchlist ? 'removeFromWatchlist' : 'addToWatchlist'}('${symbol}')" ${isInWatchlist ? 'style="background-color: var(--accent-danger);"' : ''}>
                     ${isInWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
@@ -1380,6 +1411,74 @@
         fetchUpcomingStocks();
         fetchWatchlist();
         
+        // Set up WebSocket for real-time updates
+        const socket = io();
+
+        socket.on('connect', () => {
+            console.log('Connected to WebSocket');
+            socket.emit('subscribe_stock');
+        });
+
+        socket.on('price_update', (data) => {
+            updatePrices(data.updates);
+        });
+
+        // Update stock prices in real-time
+        function updatePrices(updates) {
+            updates.forEach(stock => {
+                const card = document.querySelector(`#stock-${stock.symbol}`);
+                if (card) {
+                    const priceElement = card.querySelector('.price-value');
+                    const changeElement = card.querySelector('.price-change');
+
+                    // Animate price changes
+                    animateValue(priceElement, parseFloat(priceElement.textContent.substring(1)), stock.price, 1000);
+
+                    changeElement.textContent = `${stock.change_pct >= 0 ? '▲' : '▼'} ${Math.abs(stock.change_pct).toFixed(2)}%`;
+                    changeElement.classList = `price-change ${stock.change_pct >= 0 ? 'positive' : 'negative'}`;
+                    
+                    // Update the mini chart color
+                    updateMiniChartColor(stock.symbol, stock.change_pct);
+                }
+            });
+        }
+
+        // Update mini chart color based on price change
+        function updateMiniChartColor(symbol, changePercent) {
+            // Try both regular and upcoming chart IDs
+            const chartIds = [`chart-${symbol}`, `chart-${symbol}-upcoming`];
+            const isPositive = changePercent >= 0;
+            const lineColor = isPositive ? '#10b981' : '#ef4444';
+            const fillColor = isPositive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            
+            chartIds.forEach(chartId => {
+                const chartElement = document.getElementById(chartId);
+                if (chartElement && chartElement._fullLayout) {
+                    // Update the chart colors
+                    Plotly.restyle(chartId, {
+                        'line.color': lineColor,
+                        'fillcolor': fillColor
+                    }, [0]);
+                }
+            });
+        }
+
+        // Animate counter for price changes
+        function animateValue(element, start, end, duration) {
+            let startTime = null;
+
+            const step = (currentTime) => {
+                if (!startTime) startTime = currentTime;
+                const progress = Math.min((currentTime - startTime) / duration, 1);
+                element.textContent = `$${(start + progress * (end - start)).toFixed(2)}`;
+                if (progress < 1) {
+                    requestAnimationFrame(step);
+                }
+            };
+
+            requestAnimationFrame(step);
+        }
+
         // Refresh every 5 minutes
         setInterval(() => {
             fetchTrendingStocks();

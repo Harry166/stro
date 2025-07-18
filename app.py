@@ -1,4 +1,5 @@
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 import yfinance as yf
 from stock_analyzer import StockAnalyzer
@@ -9,9 +10,12 @@ import json
 from functools import wraps
 from database import Database
 import time
+import threading
+from collections import defaultdict
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-here-change-in-production')
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Initialize components
 stock_analyzer = StockAnalyzer()
@@ -23,6 +27,10 @@ trending_stocks = []
 
 # Storage for alerts (per user)
 stock_alerts = {}
+
+# Cache for stock prices to reduce API calls
+price_cache = defaultdict(lambda: {'price': None, 'timestamp': None, 'change_pct': None})
+CACHE_DURATION = 30  # Cache duration in seconds
 
 def update_trending_stocks():
     """Update the list of trending stocks based on analysis"""
@@ -57,7 +65,11 @@ def update_trending_stocks():
                 # Combine scores
                 overall_score = (news_sentiment * 0.4) + (trend_score * 0.6)
                 
-                if overall_score > 0.6:  # Threshold for trending
+                # Debug logging
+                print(f"Stock {symbol}: sentiment={news_sentiment:.2f}, trend={trend_score:.2f}, overall={overall_score:.2f}")
+                
+                # Lower threshold to 0.5 instead of 0.6
+                if overall_score > 0.5:  # Lowered threshold for trending
                     info = stock.info
                     current_price = info.get('currentPrice', 0)
                     
@@ -156,12 +168,42 @@ def get_trending_stocks():
     """API endpoint to get trending stocks"""
     stocks_data = []
     
+    # Update trending stocks if empty
+    if not trending_stocks:
+        update_trending_stocks()
+    
     for stock in trending_stocks:
         try:
             ticker = yf.Ticker(stock['symbol'])
             
-            # Get historical data for chart
-            hist = ticker.history(period="1mo")
+            # Use cache before fetching real-time
+            cache_timestamp = price_cache[stock['symbol']]['timestamp']
+            if cache_timestamp and (time.time() - cache_timestamp) < CACHE_DURATION:
+                current_price = price_cache[stock['symbol']]['price']
+                price_change_pct = price_cache[stock['symbol']]['change_pct']
+                # Get historical data for chart
+                hist = ticker.history(period="1mo")
+            else:
+                # Get real-time quote
+                info = ticker.info
+                
+                # Get historical data for chart
+                hist = ticker.history(period="1mo")
+                
+                # Get real-time price
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+                if not current_price and not hist.empty:
+                    current_price = hist['Close'].iloc[-1]
+                
+                # Calculate daily change percentage
+                if not hist.empty and len(hist) > 1:
+                    previous_close = hist['Close'].iloc[-2]
+                    price_change_pct = ((current_price - previous_close) / previous_close) * 100
+                else:
+                    price_change_pct = 0
+                
+                # Cache results
+                price_cache[stock['symbol']].update({'price': current_price, 'timestamp': time.time(), 'change_pct': price_change_pct})
             
             # Prepare chart data
             chart_data = {
@@ -172,7 +214,8 @@ def get_trending_stocks():
             stocks_data.append({
                 'symbol': stock['symbol'],
                 'name': stock['name'],
-                'current_price': stock['current_price'],
+                'current_price': current_price,
+                'price_change_pct': price_change_pct,
                 'chart_data': chart_data,
                 'score': stock['score']
             })
@@ -209,7 +252,17 @@ def get_upcoming_stocks():
             hist = ticker.history(period="1mo")
             
             if not hist.empty:
-                current_price = info.get('currentPrice', hist['Close'].iloc[-1])
+                # Get real-time price
+                current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+                if not current_price:
+                    current_price = hist['Close'].iloc[-1]
+                
+                # Calculate daily change percentage
+                if len(hist) > 1:
+                    previous_close = hist['Close'].iloc[-2]
+                    price_change_pct = ((current_price - previous_close) / previous_close) * 100
+                else:
+                    price_change_pct = 0
                 
                 # Prepare chart data
                 chart_data = {
@@ -221,6 +274,7 @@ def get_upcoming_stocks():
                     'symbol': stock['symbol'],
                     'name': stock['name'],
                     'current_price': current_price,
+                    'price_change_pct': price_change_pct,
                     'chart_data': chart_data
                 })
         except Exception as e:
@@ -250,10 +304,22 @@ def get_stock_details(symbol):
         # Get recent news
         recent_news = news_scraper.get_recent_news(symbol)
         
+        # Get real-time price
+        current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+        if not current_price and not hist.empty:
+            current_price = hist['Close'].iloc[-1]
+        
+        # Calculate daily change percentage
+        price_change_pct = 0
+        if not hist.empty and len(hist) > 1:
+            previous_close = hist['Close'].iloc[-2]
+            price_change_pct = ((current_price - previous_close) / previous_close) * 100
+        
         response_data = {
             'symbol': symbol,
             'name': info.get('longName', symbol),
-            'current_price': info.get('currentPrice', hist['Close'].iloc[-1] if not hist.empty else 0),
+            'current_price': current_price,
+            'price_change_pct': price_change_pct,
             'summary': summary,
             'chart_data': {
                 'dates': hist.index.strftime('%Y-%m-%d').tolist(),
@@ -347,8 +413,12 @@ def manage_watchlist():
                 
                 if not hist.empty:
                     current_price = info.get('currentPrice', hist['Close'].iloc[-1])
-                    first_price = hist['Close'].iloc[0]
-                    price_change = ((current_price - first_price) / first_price) * 100
+                    # Calculate daily change percentage (same as trending stocks)
+                    if len(hist) > 1:
+                        previous_close = hist['Close'].iloc[-2]
+                        price_change = ((current_price - previous_close) / previous_close) * 100
+                    else:
+                        price_change = 0
                     
                     watchlist_data.append({
                         'symbol': symbol,
@@ -498,6 +568,111 @@ def check_watchlist_alerts():
     
     print(f"Checked watchlist alerts at {datetime.now()}")
 
+def get_cached_price(symbol):
+    """Get cached price or fetch new one if cache expired"""
+    cache_entry = price_cache[symbol]
+    
+    # Check if cache is valid
+    if cache_entry['timestamp'] and (time.time() - cache_entry['timestamp']) < CACHE_DURATION:
+        return cache_entry['price'], cache_entry['change_pct']
+    
+    # Fetch new price
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        hist = ticker.history(period="2d")
+        
+        if not hist.empty:
+            current_price = info.get('currentPrice') or info.get('regularMarketPrice')
+            if not current_price:
+                current_price = hist['Close'].iloc[-1]
+            
+            # Calculate daily change
+            if len(hist) > 1:
+                previous_close = hist['Close'].iloc[-2]
+                price_change_pct = ((current_price - previous_close) / previous_close) * 100
+            else:
+                price_change_pct = 0
+            
+            # Update cache
+            price_cache[symbol].update({
+                'price': current_price,
+                'timestamp': time.time(),
+                'change_pct': price_change_pct
+            })
+            
+            return current_price, price_change_pct
+    except Exception as e:
+        print(f"Error fetching price for {symbol}: {e}")
+        return None, None
+
+def broadcast_price_updates():
+    """Broadcast real-time price updates via WebSocket"""
+    while True:
+        try:
+            # Get all active symbols (trending + upcoming)
+            active_symbols = set()
+            
+            # Add trending stock symbols
+            for stock in trending_stocks:
+                active_symbols.add(stock['symbol'])
+            
+            # Add some upcoming stocks
+            upcoming_symbols = ['PLTR', 'RBLX', 'AI', 'SOFI', 'LCID']
+            active_symbols.update(upcoming_symbols)
+            
+            # Prepare update data
+            updates = []
+            
+            for symbol in active_symbols:
+                price, change_pct = get_cached_price(symbol)
+                if price:
+                    updates.append({
+                        'symbol': symbol,
+                        'price': price,
+                        'change_pct': change_pct,
+                        'timestamp': time.time()
+                    })
+            
+            # Broadcast updates to all connected clients
+            if updates:
+                socketio.emit('price_update', {'updates': updates})
+            
+            # Wait before next update cycle
+            time.sleep(5)  # Update every 5 seconds
+            
+        except Exception as e:
+            print(f"Error in broadcast_price_updates: {e}")
+            time.sleep(10)  # Wait longer on error
+
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    print('Client connected')
+    emit('connected', {'data': 'Connected to real-time updates'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print('Client disconnected')
+
+@socketio.on('subscribe_stock')
+def handle_subscribe(data=None):
+    """Handle stock subscription request"""
+    if data and isinstance(data, dict):
+        symbol = data.get('symbol')
+        if symbol:
+            price, change_pct = get_cached_price(symbol)
+            if price:
+                emit('price_update', {
+                    'updates': [{
+                        'symbol': symbol,
+                        'price': price,
+                        'change_pct': change_pct,
+                        'timestamp': time.time()
+                    }]
+                })
+
 if __name__ == '__main__':
     # Initialize trending stocks on startup
     update_trending_stocks()
@@ -508,5 +683,10 @@ if __name__ == '__main__':
     scheduler.add_job(func=check_watchlist_alerts, trigger="interval", minutes=30)
     scheduler.start()
     
-    # Run the app
-    app.run(debug=True)
+    # Start real-time price updates thread
+    real_time_thread = threading.Thread(target=broadcast_price_updates)
+    real_time_thread.daemon = True
+    real_time_thread.start()
+    
+    # Run the app with SocketIO
+    socketio.run(app, debug=True)
